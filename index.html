@@ -30,7 +30,12 @@
     </div>
 
 <script>
-const PROXY_URL = 'https://cors-anywhere.herokuapp.com/';
+const PROXY_URLS = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
+];
+
 let favoriler = JSON.parse(localStorage.getItem('favoriler')) || [];
 let oyuncular = [];
 let filtreler = {
@@ -44,6 +49,21 @@ document.getElementById('fotografli').checked = filtreler.fotografli;
 document.getElementById('fotografsiz').checked = filtreler.fotografsiz;
 document.getElementById('userlar').checked = filtreler.userlar;
 document.getElementById('favoriler').checked = filtreler.favoriler;
+
+async function proxyFetch(url) {
+    for (let proxyUrl of PROXY_URLS) {
+        try {
+            const response = await fetch(proxyUrl + encodeURIComponent(url));
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.log(`Proxy ${proxyUrl} başarısız, diğeri deneniyor...`);
+            continue;
+        }
+    }
+    throw new Error('Tüm proxy sunucuları başarısız oldu');
+}
 
 function kullanicilariGuncelle() {
     const searchValue = document.getElementById("searchInput").value.toLowerCase();
@@ -108,50 +128,72 @@ function kullanicilariGuncelle() {
 }
 
 function sunucuKontrol(sunucuNo, odaKodu) {
-    let ws = new WebSocket(`wss://server0${sunucuNo}.gartic.io/socket.io/?EIO=3&transport=websocket`);
-    ws.onopen = () => ws.send(`42[12,{"v":20000,"platform":0,"sala":"${odaKodu.slice(-4)}"}]`);
-    ws.onmessage = (mesaj) => {
-        if (mesaj.data[4] == "5") {
-            let veri = JSON.parse(mesaj.data.slice(2));
-            if (veri[0] == 5) {
-                veri[5].forEach(oyuncu => {
-                    oyuncular.push({
-                        "puan": oyuncu.pontos,
-                        "zafer": oyuncu.vitorias,
-                        "id": oyuncu.id.toString(),
-                        "avatar": oyuncu.avatar,
-                        "odasi": `https://gartic.io/${odaKodu}`,
-                        "nick": oyuncu.nick,
-                        "foto": oyuncu.foto
-                    });
-                });
-                kullanicilariGuncelle();
-                ws.close();
+    return new Promise((resolve, reject) => {
+        let ws = new WebSocket(`wss://server0${sunucuNo}.gartic.io/socket.io/?EIO=3&transport=websocket`);
+        
+        let timeout = setTimeout(() => {
+            ws.close();
+            resolve();
+        }, 5000);
+
+        ws.onopen = () => {
+            ws.send(`42[12,{"v":20000,"platform":0,"sala":"${odaKodu.slice(-4)}"}]`);
+        };
+
+        ws.onmessage = (mesaj) => {
+            if (mesaj.data[4] == "5") {
+                try {
+                    let veri = JSON.parse(mesaj.data.slice(2));
+                    if (veri[0] == 5) {
+                        veri[5].forEach(oyuncu => {
+                            if (!oyuncular.some(o => o.id === oyuncu.id.toString())) {
+                                oyuncular.push({
+                                    "puan": oyuncu.pontos,
+                                    "zafer": oyuncu.vitorias,
+                                    "id": oyuncu.id.toString(),
+                                    "avatar": oyuncu.avatar,
+                                    "odasi": `https://gartic.io/${odaKodu}`,
+                                    "nick": oyuncu.nick,
+                                    "foto": oyuncu.foto
+                                });
+                            }
+                        });
+                        clearTimeout(timeout);
+                        ws.close();
+                        resolve();
+                    }
+                } catch (e) {
+                    console.error('WebSocket veri işleme hatası:', e);
+                    resolve();
+                }
             }
-        }
-    }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket hatası:', error);
+            resolve();
+        };
+    });
 }
 
-function veriCek(odaKodlari) {
+async function veriCek(odaKodlari) {
+    const promises = [];
     odaKodlari.forEach(odaKodu => {
         for (let i = 1; i <= 6; i++) {
-            sunucuKontrol(i, odaKodu);
+            promises.push(sunucuKontrol(i, odaKodu));
         }
     });
+    
+    await Promise.all(promises);
+    kullanicilariGuncelle();
 }
 
 async function odalariGetir() {
     try {
-        const response = await fetch(`${PROXY_URL}https://gartic.io/req/list?search=&language[]=8`);
-        const veri = await response.json();
+        const veri = await proxyFetch('https://gartic.io/req/list?search=&language[]=8');
         oyuncular = [];
-        let odaKodlari = [];
-        veri.forEach(oda => {
-            if (oda.quant > 0) {
-                odaKodlari.push(oda.code);
-            }
-        });
-        veriCek(odaKodlari);
+        let odaKodlari = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
+        await veriCek(odaKodlari);
     } catch (error) {
         console.error('Veri çekme hatası:', error);
     }
@@ -181,6 +223,9 @@ setInterval(odalariGetir, 30000);
     -webkit-font-smoothing: antialiased;
     background: rgb(17, 22, 32);
     background: linear-gradient(177deg, rgba(17, 22, 32, 1) 24%, rgba(38, 55, 89, 1) 82%);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
 }
 
 .kullanicilar-container {
@@ -190,6 +235,7 @@ setInterval(odalariGetir, 30000);
     width: 100%;
     overflow-y: auto;
     padding: 15px;
+    box-sizing: border-box;
 }
 
 .search-input {
@@ -205,10 +251,12 @@ setInterval(odalariGetir, 30000);
 .kullanicilar {
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     flex-wrap: wrap;
     width: 100%;
     gap: 8px;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
 .oyuncu {
@@ -223,6 +271,7 @@ setInterval(odalariGetir, 30000);
     transition: 300ms all;
     position: relative;
     border-radius: 5px 18px 5px 5px;
+    padding: 5px;
 }
 
 .oyuncu:hover {
@@ -246,6 +295,10 @@ setInterval(odalariGetir, 30000);
 
 .arama-alani {
     display: flex;
+    gap: 10px;
+    width: 100%;
+    max-width: 500px;
+    margin: 10px 0;
 }
 
 .oyuncu-text {
@@ -295,6 +348,7 @@ setInterval(odalariGetir, 30000);
     margin-top: 5px;
     padding: 10px;
     max-width: 280px;
+    flex: 1;
 }
 
 .fako_filter {
@@ -302,6 +356,8 @@ setInterval(odalariGetir, 30000);
     gap: 5px;
     margin-bottom: 15px;
     margin-top: 5px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .fako_filter label {
@@ -314,6 +370,7 @@ setInterval(odalariGetir, 30000);
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
+    cursor: pointer;
 }
 
 .fako_filter label:has(input[type="checkbox"]:checked) {
@@ -359,6 +416,11 @@ setInterval(odalariGetir, 30000);
     padding: 10px 15px;
     height: 46px;
     border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .gg-redo {
