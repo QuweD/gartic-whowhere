@@ -4,40 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WHOWHERE gartic.io</title>
+    <link href="https://css.gg/css?=|star" rel="stylesheet">
 </head>
-<body class="fako-viewer">
-    <div class="kullanicilar-container">
-        <h1 class="fako_logo">WHOWHERE <span id="online">Online: <b>0</b><span></h1>
-        <div class="arama-alani">
-            <input type="text" id="searchInput" placeholder="Kullanıcı ara" class="search-input">
-            <button id="yenile"><i class="gg-redo"></i></button>
+<body class="cyber-viewer">
+    <div class="main-container">
+        <div class="header">
+            <h1 class="cyber_logo">WHOWHERE <span id="online">Online: <b>0</b></span></h1>
+            <div class="search-area">
+                <input type="text" id="searchInput" placeholder="Search Player..." class="search-input">
+                <button id="yenile" class="refresh-btn">
+                    <svg viewBox="0 0 24 24" class="refresh-icon">
+                        <path d="M12 20c4.4 0 8-3.6 8-8s-3.6-8-8-8s-8 3.6-8 8h3l-4 4l-4-4h3c0-5.5 4.5-10 10-10s10 4.5 10 10s-4.5 10-10 10v-2z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="filter-section">
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="fotografli">
+                    <span>With Photo</span>
+                </label>
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="fotografsiz">
+                    <span>No Photo</span>
+                </label>
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="userlar">
+                    <span>Hide Users</span>
+                </label>
+                <label class="cyber-checkbox">
+                    <input type="checkbox" id="favoriler">
+                    <span>Favorites</span>
+                </label>
+            </div>
         </div>
-        <div class="fako_filter">
-            <label for="fotografli">
-                <input type="checkbox" id="fotografli"> Fotoğraflı
-            </label>
-            <label for="fotografsiz">
-                <input type="checkbox" id="fotografsiz"> Fotoğrafsız
-            </label>
-            <label for="userlar">
-                <input type="checkbox" id="userlar"> User Gizle
-            </label>
-            <label for="favoriler">
-                <input type="checkbox" id="favoriler"> Favoriler
-            </label>
-        </div>
-        <div class="kullanicilar"></div>
+        <div class="players-grid"></div>
+        <div class="made-by">Made by Akira</div>
     </div>
 
 <script>
 const PROXY_URLS = [
     'https://corsproxy.io/?',
     'https://api.allorigins.win/raw?url=',
-    'https://api.codetabs.com/v1/proxy?quest='
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://cors-anywhere.herokuapp.com/'
 ];
 
 let favoriler = JSON.parse(localStorage.getItem('favoriler')) || [];
-let oyuncular = [];
+let oyuncular = new Map();
 let filtreler = {
     fotografli: localStorage.getItem('fotografli') === 'true',
     fotografsiz: localStorage.getItem('fotografsiz') === 'true',
@@ -45,82 +58,97 @@ let filtreler = {
     favoriler: localStorage.getItem('favorilerGoster') === 'true'
 };
 
-document.getElementById('fotografli').checked = filtreler.fotografli;
-document.getElementById('fotografsiz').checked = filtreler.fotografsiz;
-document.getElementById('userlar').checked = filtreler.userlar;
-document.getElementById('favoriler').checked = filtreler.favoriler;
+// Filtreleri başlangıçta ayarla
+Object.entries(filtreler).forEach(([key, value]) => {
+    document.getElementById(key).checked = value;
+});
 
 async function proxyFetch(url) {
+    let lastError;
     for (let proxyUrl of PROXY_URLS) {
         try {
-            const response = await fetch(proxyUrl + encodeURIComponent(url));
+            const response = await fetch(proxyUrl + encodeURIComponent(url), {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
             if (response.ok) {
                 return await response.json();
             }
         } catch (error) {
-            console.log(`Proxy ${proxyUrl} başarısız, diğeri deneniyor...`);
+            lastError = error;
             continue;
         }
     }
-    throw new Error('Tüm proxy sunucuları başarısız oldu');
+    throw lastError;
 }
 
 function kullanicilariGuncelle() {
     const searchValue = document.getElementById("searchInput").value.toLowerCase();
-    document.querySelector(".kullanicilar").innerHTML = "";
-    let filteredPlayers = oyuncular.filter(oyuncu => {
+    const playersGrid = document.querySelector(".players-grid");
+    playersGrid.innerHTML = "";
+
+    let filteredPlayers = Array.from(oyuncular.values()).filter(oyuncu => {
         if (filtreler.fotografli && !oyuncu.foto) return false;
         if (filtreler.fotografsiz && oyuncu.foto) return false;
         if (filtreler.userlar && oyuncu.nick.toLowerCase().includes('user')) return false;
         if (filtreler.favoriler && !favoriler.includes(oyuncu.id)) return false;
-        if (!oyuncu.nick.toLowerCase().includes(searchValue)) return false;
-        return true;
+        return oyuncu.nick.toLowerCase().includes(searchValue);
     });
 
     filteredPlayers.sort((a, b) => {
         const aFavori = favoriler.includes(a.id);
         const bFavori = favoriler.includes(b.id);
-        if (aFavori && !bFavori) return -1;
-        if (!aFavori && bFavori) return 1;
-        return 0;
+        if (aFavori !== bFavori) return bFavori - aFavori;
+        return b.puan - a.puan;
     });
 
     filteredPlayers.forEach(oyuncu => {
         const isFavori = favoriler.includes(oyuncu.id);
-        const oyuncuDivi = `
-            <div class="oyuncu ${isFavori ? 'favori' : ''}" data-id="${oyuncu.id}">
-                <div class="gg-heart ${isFavori ? 'activex' : ''}"></div>
-                <a href="${oyuncu.foto || 'https://gartic.io/static/images/avatar/svg/' + oyuncu.avatar + '.svg'}">
-                    <img src="${oyuncu.foto || 'https://gartic.io/static/images/avatar/svg/' + oyuncu.avatar + '.svg'}">
-                </a>
-                <div class="oyuncu-text">
-                    <b>${oyuncu.nick}</b>
-                    <i>ID: ${oyuncu.id}</i>
-                    <span>ODA: ${oyuncu.odasi.slice(18)}</span>
-                    <div class="linkler">
-                        <a target="_blank" class="oyuncu-link" href="${oyuncu.odasi}">ODAYA GİR</a>
-                        <a target="_blank" class="oyuncu-link" href="${oyuncu.odasi}/viewer">İZLE</a>
-                    </div>
+        const playerCard = document.createElement('div');
+        playerCard.className = `player-card ${isFavori ? 'favorite' : ''}`;
+        playerCard.dataset.id = oyuncu.id;
+        
+        playerCard.innerHTML = `
+            <div class="star-icon ${isFavori ? 'active' : ''}">★</div>
+            <div class="player-avatar">
+                <img src="${oyuncu.foto || 'https://gartic.io/static/images/avatar/svg/' + oyuncu.avatar + '.svg'}" 
+                     alt="${oyuncu.nick}">
+            </div>
+            <div class="player-info">
+                <div class="player-name">${oyuncu.nick}</div>
+                <div class="player-details">
+                    <span>ID: ${oyuncu.id}</span>
+                    <span>Points: ${oyuncu.puan}</span>
+                </div>
+                <div class="room-info">Room: ${oyuncu.odasi.slice(18)}</div>
+                <div class="action-buttons">
+                    <a href="${oyuncu.odasi}" target="_blank" class="cyber-button">Join</a>
+                    <a href="${oyuncu.odasi}/viewer" target="_blank" class="cyber-button">Watch</a>
                 </div>
             </div>`;
-        document.querySelector(".kullanicilar").innerHTML += oyuncuDivi;
+
+        playersGrid.appendChild(playerCard);
     });
 
     document.getElementById("online").querySelector("b").textContent = filteredPlayers.length;
 
-    document.querySelectorAll('.gg-heart').forEach(button => {
-        button.addEventListener('click', (e) => {
-            const oyuncuDiv = e.target.closest('.oyuncu');
-            const oyuncuId = oyuncuDiv.getAttribute('data-id');
-            if (favoriler.includes(oyuncuId)) {
-                favoriler = favoriler.filter(id => id !== oyuncuId);
-                e.target.classList.remove('activex');
-                oyuncuDiv.classList.remove('favori');
+    // Yıldız tıklama işlevini ekle
+    document.querySelectorAll('.star-icon').forEach(star => {
+        star.addEventListener('click', (e) => {
+            const playerCard = e.target.closest('.player-card');
+            const playerId = playerCard.dataset.id;
+            
+            if (favoriler.includes(playerId)) {
+                favoriler = favoriler.filter(id => id !== playerId);
+                playerCard.classList.remove('favorite');
+                e.target.classList.remove('active');
             } else {
-                favoriler.push(oyuncuId);
-                e.target.classList.add('activex');
-                oyuncuDiv.classList.add('favori');
+                favoriler.push(playerId);
+                playerCard.classList.add('favorite');
+                e.target.classList.add('active');
             }
+            
             localStorage.setItem('favoriler', JSON.stringify(favoriler));
             kullanicilariGuncelle();
         });
@@ -128,10 +156,9 @@ function kullanicilariGuncelle() {
 }
 
 function sunucuKontrol(sunucuNo, odaKodu) {
-    return new Promise((resolve, reject) => {
-        let ws = new WebSocket(`wss://server0${sunucuNo}.gartic.io/socket.io/?EIO=3&transport=websocket`);
-        
-        let timeout = setTimeout(() => {
+    return new Promise((resolve) => {
+        const ws = new WebSocket(`wss://server0${sunucuNo}.gartic.io/socket.io/?EIO=3&transport=websocket`);
+        const timeout = setTimeout(() => {
             ws.close();
             resolve();
         }, 5000);
@@ -141,36 +168,34 @@ function sunucuKontrol(sunucuNo, odaKodu) {
         };
 
         ws.onmessage = (mesaj) => {
-            if (mesaj.data[4] == "5") {
+            if (mesaj.data.startsWith('42[5,')) {
                 try {
-                    let veri = JSON.parse(mesaj.data.slice(2));
-                    if (veri[0] == 5) {
+                    const veri = JSON.parse(mesaj.data.slice(2));
+                    if (Array.isArray(veri) && veri[0] === 5 && Array.isArray(veri[5])) {
                         veri[5].forEach(oyuncu => {
-                            if (!oyuncular.some(o => o.id === oyuncu.id.toString())) {
-                                oyuncular.push({
-                                    "puan": oyuncu.pontos,
-                                    "zafer": oyuncu.vitorias,
-                                    "id": oyuncu.id.toString(),
-                                    "avatar": oyuncu.avatar,
-                                    "odasi": `https://gartic.io/${odaKodu}`,
-                                    "nick": oyuncu.nick,
-                                    "foto": oyuncu.foto
-                                });
-                            }
+                            const oyuncuData = {
+                                puan: oyuncu.pontos || 0,
+                                zafer: oyuncu.vitorias || 0,
+                                id: oyuncu.id.toString(),
+                                avatar: oyuncu.avatar,
+                                odasi: `https://gartic.io/${odaKodu}`,
+                                nick: oyuncu.nick,
+                                foto: oyuncu.foto || null
+                            };
+                            oyuncular.set(oyuncuData.id, oyuncuData);
                         });
-                        clearTimeout(timeout);
-                        ws.close();
-                        resolve();
                     }
                 } catch (e) {
                     console.error('WebSocket veri işleme hatası:', e);
-                    resolve();
                 }
+                clearTimeout(timeout);
+                ws.close();
+                resolve();
             }
         };
 
-        ws.onerror = (error) => {
-            console.error('WebSocket hatası:', error);
+        ws.onerror = () => {
+            clearTimeout(timeout);
             resolve();
         };
     });
@@ -178,345 +203,363 @@ function sunucuKontrol(sunucuNo, odaKodu) {
 
 async function veriCek(odaKodlari) {
     const promises = [];
-    odaKodlari.forEach(odaKodu => {
+    for (const odaKodu of odaKodlari) {
         for (let i = 1; i <= 6; i++) {
             promises.push(sunucuKontrol(i, odaKodu));
         }
-    });
+    }
     
-    await Promise.all(promises);
+    await Promise.allSettled(promises);
     kullanicilariGuncelle();
 }
 
 async function odalariGetir() {
     try {
         const veri = await proxyFetch('https://gartic.io/req/list?search=&language[]=8');
-        oyuncular = [];
-        let odaKodlari = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
+        oyuncular.clear();
+        const odaKodlari = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
         await veriCek(odaKodlari);
     } catch (error) {
         console.error('Veri çekme hatası:', error);
     }
 }
 
+// Event Listeners
 document.getElementById("searchInput").addEventListener("input", kullanicilariGuncelle);
 document.getElementById("yenile").addEventListener("click", odalariGetir);
 
-const filters = ['fotografli', 'fotografsiz', 'userlar', 'favoriler'];
-filters.forEach(filter => {
+// Filtre değişikliklerini dinle
+['fotografli', 'fotografsiz', 'userlar', 'favoriler'].forEach(filter => {
     document.getElementById(filter).addEventListener('change', (e) => {
         filtreler[filter] = e.target.checked;
         localStorage.setItem(filter, e.target.checked);
-        setTimeout(kullanicilariGuncelle, 15);
+        kullanicilariGuncelle();
     });
 });
 
+// İlk yükleme ve otomatik yenileme
 odalariGetir();
-setInterval(odalariGetir, 30000);
+setInterval(odalariGetir, 60000);
 </script>
 
+
 <style>
-.fako-viewer {
-    background: #111620;
-    color: white;
-    font-family: Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    background: rgb(17, 22, 32);
-    background: linear-gradient(177deg, rgba(17, 22, 32, 1) 24%, rgba(38, 55, 89, 1) 82%);
-    margin: 0;
-    padding: 0;
-    min-height: 100vh;
+:root {
+    --primary: #00ff9d;
+    --secondary: #0066ff;
+    --background: #0a0a0a;
+    --surface: #1a1a1a;
+    --text: #ffffff;
+    --accent: #ff0066;
+    --cyber-gradient: linear-gradient(45deg, var(--primary), var(--secondary));
 }
 
-.kullanicilar-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 100%;
-    overflow-y: auto;
-    padding: 15px;
+* {
+    margin: 0;
+    padding: 0;
     box-sizing: border-box;
+}
+
+body {
+    background: var(--background);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    line-height: 1.5;
+}
+
+.main-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    position: relative;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.cyber_logo {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: var(--cyber-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.search-area {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 20px;
 }
 
 .search-input {
-    margin: 10px;
-    padding: 10px;
-    font-size: 18px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    width: 100%;
-    max-width: 500px;
-}
-
-.kullanicilar {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    width: 100%;
-    gap: 8px;
-    padding: 10px;
-    box-sizing: border-box;
-}
-
-.oyuncu {
-    border: 1px solid #555;
-    display: flex;
-    align-items: center;
-    background-color: #19233491;
-    color: white;
-    flex: 1 1 calc(25% - 20px);
-    box-sizing: border-box;
-    max-width: 200px;
-    transition: 300ms all;
-    position: relative;
-    border-radius: 5px 18px 5px 5px;
-    padding: 5px;
-}
-
-.oyuncu:hover {
-    background-color: #31528bcf;
-    border: 1px solid #c4c4c4;
-    transition: 300ms all;
-}
-
-.oyuncu img {
-    width: 60px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 50%;
-    border: 2px solid #ddd;
-    margin-right: 10px;
-    margin-left: 5px;
-    margin-top: 4px;
-    margin-bottom: 2px;
-    transition: 300ms all;
-}
-
-.arama-alani {
-    display: flex;
-    gap: 10px;
-    width: 100%;
-    max-width: 500px;
-    margin: 10px 0;
-}
-
-.oyuncu-text {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow: hidden;
-}
-
-.oyuncu b,
-.oyuncu i,
-.oyuncu span {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 13px;
-    margin-top: 2px;
-    margin-bottom: 2px;
-}
-
-.oyuncu i {
-    font-size: 12px;
-}
-
-.linkler {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    font-size: 12px;
-    font-weight: normal;
-}
-
-.oyuncu-link {
-    color: #24ccff;
-    text-decoration: none;
-    font-weight: bold;
-    margin-top: 2px;
-}
-
-#searchInput {
-    background: #3d2aa3;
-    border: solid 1px #405d60;
-    color: #fff;
+    background: var(--surface);
+    border: 2px solid var(--primary);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 8px;
+    width: 300px;
+    font-size: 1rem;
     outline: none;
-    display: flex;
-    margin-top: 5px;
-    padding: 10px;
-    max-width: 280px;
-    flex: 1;
+    transition: all 0.3s ease;
 }
 
-.fako_filter {
+.search-input:focus {
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.3);
+}
+
+.refresh-btn {
+    background: var(--primary);
+    border: none;
+    border-radius: 8px;
+    width: 48px;
+    height: 48px;
+    cursor: pointer;
     display: flex;
-    gap: 5px;
-    margin-bottom: 15px;
-    margin-top: 5px;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.refresh-btn:hover {
+    background: var(--secondary);
+    transform: rotate(180deg);
+}
+
+.refresh-icon {
+    width: 24px;
+    height: 24px;
+    fill: var(--background);
+}
+
+.filter-section {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
     flex-wrap: wrap;
+    margin-bottom: 30px;
+}
+
+.cyber-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-radius: 6px;
+    border: 1px solid var(--primary);
+    transition: all 0.3s ease;
+}
+
+.cyber-checkbox:hover {
+    background: rgba(0, 255, 157, 0.1);
+}
+
+.cyber-checkbox input {
+    display: none;
+}
+
+.cyber-checkbox span {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.cyber-checkbox input:checked + span {
+    color: var(--primary);
+}
+
+.players-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 20px 0;
+}
+
+.player-card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 15px;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.player-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 255, 157, 0.2);
+}
+
+.player-card.favorite {
+    border: 1px solid var(--primary);
+}
+
+.star-icon {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 24px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+.star-icon:hover,
+.star-icon.active {
+    color: var(--primary);
+    text-shadow: 0 0 10px var(--primary);
+}
+
+.player-avatar {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 15px;
+}
+
+.player-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--primary);
+}
+
+.player-info {
+    text-align: center;
+}
+
+.player-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.player-details {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.room-info {
+    font-size: 0.9rem;
+    color: var(--primary);
+    margin-bottom: 15px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
     justify-content: center;
 }
 
-.fako_filter label {
-    border: solid 1px #2c279a;
-    border-radius: 5px;
-    padding: 8px 8px;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    -khtml-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-    cursor: pointer;
+.cyber-button {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
 }
 
-.fako_filter label:has(input[type="checkbox"]:checked) {
-    background-color: #2551a2;
+.cyber-button:hover {
+    background: var(--primary);
+    color: var(--background);
 }
 
-.fako_logo {
-    font-size: 18px;
-    background: linear-gradient(to right, hsl(320.6, 100%, 56.1%), hsl(204 100% 59%));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-align: center;
-    margin-bottom: 5px;
+.made-by {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    font-size: 0.8rem;
+    color: var(--primary);
+    padding: 8px 15px;
+    background: var(--surface);
+    border-radius: 20px;
+    border: 1px solid var(--primary);
+    box-shadow: 0 0 10px rgba(0, 255, 157, 0.2);
 }
 
 @media (max-width: 768px) {
-    .oyuncu {
-        flex: 1 1 calc(50% - 20px);
+    .cyber_logo {
+        font-size: 2rem;
     }
-    .fako_filter {
-        padding: 0px 10px;
-        flex-wrap: wrap;
-        justify-content: space-around;
-        gap: 8px;
+
+    .search-area {
+        flex-direction: column;
+        align-items: center;
     }
-    .fako_filter label {
-        flex: 1 1 38%;
-        text-align: center;
+
+    .search-input {
+        width: 100%;
+        max-width: 300px;
+    }
+
+    .filter-section {
+        gap: 10px;
+    }
+
+    .cyber-checkbox {
+        padding: 6px 12px;
+    }
+
+    .players-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 15px;
+    }
+
+    .made-by {
+        bottom: 10px;
+        right: 10px;
+        font-size: 0.7rem;
     }
 }
 
 @media (max-width: 480px) {
-    .oyuncu {
-        flex: 1 1 100%;
-        max-width: 46%;
+    .main-container {
+        padding: 10px;
+    }
+
+    .cyber_logo {
+        font-size: 1.5rem;
+    }
+
+    .players-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .player-card {
+        padding: 10px;
     }
 }
 
-#yenile {
-    background: #2551a2;
-    color: #fff;
-    margin-top: 5px;
-    padding: 10px 15px;
-    height: 46px;
-    border-radius: 6px;
-    cursor: pointer;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+@keyframes glow {
+    0% {
+        box-shadow: 0 0 5px var(--primary);
+    }
+    50% {
+        box-shadow: 0 0 20px var(--primary);
+    }
+    100% {
+        box-shadow: 0 0 5px var(--primary);
+    }
 }
 
-.gg-redo {
-    box-sizing: border-box;
-    position: relative;
-    display: block;
-    transform: scale(var(--ggs, 1.3));
-    width: 14px;
-    height: 14px;
-    border: 2px solid;
-    border-right-color: transparent;
-    border-radius: 100px
-}
-
-.gg-redo::before {
-    content: "";
-    display: block;
-    box-sizing: border-box;
-    position: absolute;
-    width: 6px;
-    height: 6px;
-    border-top: 2px solid;
-    border-right: 2px solid;
-    top: -3px;
-    right: -1px;
-    transform: rotate(68deg)
-}
-
-.gg-heart,
-.gg-heart::after {
-    cursor: pointer;
-    border: 2px solid;
-    border-top-left-radius: 100px;
-    border-top-right-radius: 100px;
-    width: 10px;
-    height: 8px;
-    border-bottom: 0
-}
-
-.gg-heart {
-    box-sizing: border-box;
-    transform: translate(calc(-10px / 2 * var(--ggs, 1)), calc(-6px / 2 * var(--ggs, 1))) rotate(-45deg) scale(var(--ggs, 1.3));
-    display: block;
-    top: -3px;
-    right: -3px;
-    position: absolute;
-    color: #e6e6e6;
-}
-
-.gg-heart::after,
-.gg-heart::before {
-    content: "";
-    display: block;
-    box-sizing: border-box;
-    position: absolute
-}
-
-.gg-heart::after {
-    right: -9px;
-    transform: rotate(90deg);
-    top: 5px
-}
-
-.gg-heart::before {
-    width: 11px;
-    height: 11px;
-    border-left: 2px solid;
-    border-bottom: 2px solid;
-    left: -2px;
-    top: 3px
-}
-
-.gg-heart.activex {
-    color: #FF3366;
-    border-color: #FF3366;
-    background: #FF9CB5;
-}
-
-.gg-heart.activex::after,
-.gg-heart.activex::before {
-    color: #FF3366;
-    background: #FF3366;
-    border-color: #FF3366;
-}
-
-.gg-heart:hover {
-    color: #FF3366;
-    background: #FF3366;
-    border-color: #FF3366;
-}
-
-.gg-heart:hover::after,
-.gg-heart:hover::before {
-    color: #FF3366;
-    background: #FF3366;
-    border-color: #FF3366;
+.favorite {
+    animation: glow 2s infinite;
 }
 </style>
 </body>
