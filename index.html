@@ -76,7 +76,7 @@ function checkServer(server, code) {
         }, 3000);
 
         ws.onopen = () => {
-            ws.send(`42["join",{"room":"${code}","v":20000}]`);
+            ws.send(`42["12",{"room":"${code}","v":20000}]`);
         };
 
         ws.onmessage = (event) => {
