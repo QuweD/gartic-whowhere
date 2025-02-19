@@ -1,406 +1,523 @@
+
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WHOWHERE gartic.io</title>
 </head>
-<body>
-    <div class="container">
-        <header>
-            <h1>WHOWHERE <span id="online">Çevrimiçi: <b>0</b></span></h1>
-            <div class="search-bar">
-                <input type="text" id="searchInput" placeholder="Oyuncu ara...">
-                <button id="refresh">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 20c4.4 0 8-3.6 8-8s-3.6-8-8-8s-8 3.6-8 8h3l-4 4l-4-4h3c0-5.5 4.5-10 10-10s10 4.5 10 10s-4.5 10-10 10v-2z"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="filters">
-                <label>
-                    <input type="checkbox" id="withPhoto">
-                    <span>Fotoğraflı</span>
-                </label>
-                <label>
-                    <input type="checkbox" id="withoutPhoto">
-                    <span>Fotoğrafsız</span>
-                </label>
-                <label>
-                    <input type="checkbox" id="favorites">
-                    <span>Favoriler</span>
-                </label>
-            </div>
-        </header>
-        <main class="players-grid"></main>
-        <div class="credit">Made by Akira</div>
+<body class="fako-viewer">
+    <div class="kullanicilar-container">
+        <h1 class="fako_logo">WHOWHERE <span id="online">Online: <b>0</b><span></h1>
+        <div class="arama-alani">
+            <input type="text" id="searchInput" placeholder="Kullanıcı ara" class="search-input">
+            <button id="yenile"><i class="gg-redo"></i></button>
+        </div>
+        <div class="fako_filter">
+            <label for="fotografli">
+                <input type="checkbox" id="fotografli"> Fotoğraflı
+            </label>
+            <label for="fotografsiz">
+                <input type="checkbox" id="fotografsiz"> Fotoğrafsız
+            </label>
+            <label for="userlar">
+                <input type="checkbox" id="userlar"> User Gizle
+            </label>
+            <label for="favoriler">
+                <input type="checkbox" id="favoriler"> Favoriler
+            </label>
+        </div>
+        <div class="kullanicilar"></div>
     </div>
 
 <script>
-const PROXY_URL = 'https://api.allorigins.win/raw?url=';
-let players = new Map();
-let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
-let filters = {
-    withPhoto: localStorage.getItem('withPhoto') === 'true',
-    withoutPhoto: localStorage.getItem('withoutPhoto') === 'true',
-    favorites: localStorage.getItem('showFavorites') === 'true'
+const PROXY_URLS = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest='
+];
+
+let favoriler = JSON.parse(localStorage.getItem('favoriler')) || [];
+let oyuncular = [];
+let filtreler = {
+    fotografli: localStorage.getItem('fotografli') === 'true',
+    fotografsiz: localStorage.getItem('fotografsiz') === 'true',
+    userlar: localStorage.getItem('userlar') === 'true',
+    favoriler: localStorage.getItem('favorilerGoster') === 'true'
 };
 
-Object.entries(filters).forEach(([key, value]) => {
-    document.getElementById(key).checked = value;
-});
+document.getElementById('fotografli').checked = filtreler.fotografli;
+document.getElementById('fotografsiz').checked = filtreler.fotografsiz;
+document.getElementById('userlar').checked = filtreler.userlar;
+document.getElementById('favoriler').checked = filtreler.favoriler;
 
-async function getRooms() {
-    try {
-        const response = await fetch(PROXY_URL + encodeURIComponent('https://gartic.io/req/list?search=&language[]=8'));
-        const data = await response.json();
-        const rooms = data.filter(room => room.quant > 0).map(room => room.code);
-        players.clear();
-        
-        for(let i = 0; i < 3; i++) {
-            await checkAllRooms(rooms);
+async function proxyFetch(url) {
+    for (let proxyUrl of PROXY_URLS) {
+        try {
+            const response = await fetch(proxyUrl + encodeURIComponent(url));
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.log(`Proxy ${proxyUrl} başarısız, diğeri deneniyor...`);
+            continue;
         }
+    }
+    throw new Error('Tüm proxy sunucuları başarısız oldu');
+}
+
+function kullanicilariGuncelle() {
+    const searchValue = document.getElementById("searchInput").value.toLowerCase();
+    document.querySelector(".kullanicilar").innerHTML = "";
+    let filteredPlayers = oyuncular.filter(oyuncu => {
+        if (filtreler.fotografli && !oyuncu.foto) return false;
+        if (filtreler.fotografsiz && oyuncu.foto) return false;
+        if (filtreler.userlar && oyuncu.nick.toLowerCase().includes('user')) return false;
+        if (filtreler.favoriler && !favoriler.includes(oyuncu.id)) return false;
+        if (!oyuncu.nick.toLowerCase().includes(searchValue)) return false;
+        return true;
+    });
+
+    filteredPlayers.sort((a, b) => {
+        const aFavori = favoriler.includes(a.id);
+        const bFavori = favoriler.includes(b.id);
+        if (aFavori && !bFavori) return -1;
+        if (!aFavori && bFavori) return 1;
+        return 0;
+    });
+
+    filteredPlayers.forEach(oyuncu => {
+        const isFavori = favoriler.includes(oyuncu.id);
+        const oyuncuDivi = `
+            <div class="oyuncu ${isFavori ? 'favori' : ''}" data-id="${oyuncu.id}">
+                <div class="gg-heart ${isFavori ? 'activex' : ''}"></div>
+                <a href="${oyuncu.foto || 'https://gartic.io/static/images/avatar/svg/' + oyuncu.avatar + '.svg'}">
+                    <img src="${oyuncu.foto || 'https://gartic.io/static/images/avatar/svg/' + oyuncu.avatar + '.svg'}">
+                </a>
+                <div class="oyuncu-text">
+                    <b>${oyuncu.nick}</b>
+                    <i>ID: ${oyuncu.id}</i>
+                    <span>ODA: ${oyuncu.odasi.slice(18)}</span>
+                    <div class="linkler">
+                        <a target="_blank" class="oyuncu-link" href="${oyuncu.odasi}">ODAYA GİR</a>
+                        <a target="_blank" class="oyuncu-link" href="${oyuncu.odasi}/viewer">İZLE</a>
+                    </div>
+                </div>
+            </div>`;
+        document.querySelector(".kullanicilar").innerHTML += oyuncuDivi;
+    });
+
+    document.getElementById("online").querySelector("b").textContent = filteredPlayers.length;
+
+    document.querySelectorAll('.gg-heart').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const oyuncuDiv = e.target.closest('.oyuncu');
+            const oyuncuId = oyuncuDiv.getAttribute('data-id');
+            if (favoriler.includes(oyuncuId)) {
+                favoriler = favoriler.filter(id => id !== oyuncuId);
+                e.target.classList.remove('activex');
+                oyuncuDiv.classList.remove('favori');
+            } else {
+                favoriler.push(oyuncuId);
+                e.target.classList.add('activex');
+                oyuncuDiv.classList.add('favori');
+            }
+            localStorage.setItem('favoriler', JSON.stringify(favoriler));
+            kullanicilariGuncelle();
+        });
+    });
+}
+
+function sunucuKontrol(sunucuNo, odaKodu) {
+    return new Promise((resolve, reject) => {
+        let ws = new WebSocket(`wss://server0${sunucuNo}.gartic.io/socket.io/?EIO=3&transport=websocket`);
         
-        updatePlayersList();
+        let timeout = setTimeout(() => {
+            ws.close();
+            resolve();
+        }, 5000);
+
+        ws.onopen = () => {
+            ws.send(`42[12,{"v":20000,"platform":0,"sala":"${odaKodu.slice(-4)}"}]`);
+        };
+
+        ws.onmessage = (mesaj) => {
+            if (mesaj.data[4] == "5") {
+                try {
+                    let veri = JSON.parse(mesaj.data.slice(2));
+                    if (veri[0] == 5) {
+                        veri[5].forEach(oyuncu => {
+                            if (!oyuncular.some(o => o.id === oyuncu.id.toString())) {
+                                oyuncular.push({
+                                    "puan": oyuncu.pontos,
+                                    "zafer": oyuncu.vitorias,
+                                    "id": oyuncu.id.toString(),
+                                    "avatar": oyuncu.avatar,
+                                    "odasi": `https://gartic.io/${odaKodu}`,
+                                    "nick": oyuncu.nick,
+                                    "foto": oyuncu.foto
+                                });
+                            }
+                        });
+                        clearTimeout(timeout);
+                        ws.close();
+                        resolve();
+                    }
+                } catch (e) {
+                    console.error('WebSocket veri işleme hatası:', e);
+                    resolve();
+                }
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket hatası:', error);
+            resolve();
+        };
+    });
+}
+
+async function veriCek(odaKodlari) {
+    const promises = [];
+    odaKodlari.forEach(odaKodu => {
+        for (let i = 1; i <= 6; i++) {
+            promises.push(sunucuKontrol(i, odaKodu));
+        }
+    });
+    
+    await Promise.all(promises);
+    kullanicilariGuncelle();
+}
+
+async function odalariGetir() {
+    try {
+        const veri = await proxyFetch('https://gartic.io/req/list?search=&language[]=8');
+        oyuncular = [];
+        let odaKodlari = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
+        await veriCek(odaKodlari);
     } catch (error) {
         console.error('Veri çekme hatası:', error);
     }
 }
 
-function checkServer(server, code) {
-    return new Promise((resolve) => {
-        const ws = new WebSocket(`wss://server${server}.gartic.io/socket.io/?EIO=3&transport=websocket`);
-        let timeout = setTimeout(() => {
-            ws.close();
-            resolve();
-        }, 3000);
+document.getElementById("searchInput").addEventListener("input", kullanicilariGuncelle);
+document.getElementById("yenile").addEventListener("click", odalariGetir);
 
-        ws.onopen = () => {
-            ws.send(`42[12,{"v":20000,"platform":0,"sala":"${code.slice(-4)}"}]`);
-        };
-
-        ws.onmessage = (event) => {
-            if (event.data[4] == "5") {
-                try {
-                    const data = JSON.parse(event.data.slice(2));
-                    if (data[0] == 5) {
-                        data[5].forEach(player => {
-                            players.set(player.id.toString(), {
-                                id: player.id.toString(),
-                                nick: player.nick,
-                                avatar: player.avatar,
-                                photo: player.foto,
-                                points: player.pontos || 0,
-                                room: `https://gartic.io/${code}`
-                            });
-                        });
-                    }
-                } catch (e) {}
-                clearTimeout(timeout);
-                ws.close();
-                resolve();
-            }
-        };
-
-        ws.onerror = () => {
-            clearTimeout(timeout);
-            resolve();
-        };
-    });
-}
-
-async function checkAllRooms(rooms) {
-    const servers = ['01', '02', '03', '04', '05', '06'];
-    const promises = [];
-
-    for (const room of rooms) {
-        for (const server of servers) {
-            promises.push(checkServer(server, room));
-        }
-    }
-
-    await Promise.allSettled(promises);
-}
-
-
-
-
-
-
-function updatePlayersList() {
-    const searchText = document.getElementById("searchInput").value.toLowerCase();
-    const playersGrid = document.querySelector(".players-grid");
-    playersGrid.innerHTML = "";
-
-    let filteredPlayers = Array.from(players.values()).filter(player => {
-        if (filters.withPhoto && !player.photo) return false;
-        if (filters.withoutPhoto && player.photo) return false;
-        if (filters.favorites && !favorites.includes(player.id)) return false;
-        return player.nick.toLowerCase().includes(searchText);
-    });
-
-    filteredPlayers.sort((a, b) => {
-        const aFav = favorites.includes(a.id);
-        const bFav = favorites.includes(b.id);
-        if (aFav !== bFav) return bFav - aFav;
-        return b.points - a.points;
-    });
-
-    filteredPlayers.forEach(player => {
-        const isFavorite = favorites.includes(player.id);
-        const card = document.createElement('div');
-        card.className = `player-card ${isFavorite ? 'favorite' : ''}`;
-        card.dataset.id = player.id;
-        
-        card.innerHTML = `
-            <div class="star ${isFavorite ? 'active' : ''}">★</div>
-            <div class="avatar">
-                <img src="${player.photo || 'https://gartic.io/static/images/avatar/svg/' + player.avatar + '.svg'}" 
-                     alt="${player.nick}">
-            </div>
-            <div class="info">
-                <div class="name">${player.nick}</div>
-                <div class="details">
-                    <span>ID: ${player.id}</span>
-                    <span>Puan: ${player.points}</span>
-                </div>
-                <div class="room">Oda: ${player.room.slice(18)}</div>
-                <div class="actions">
-                    <a href="${player.room}" target="_blank">Katıl</a>
-                    <a href="${player.room}/viewer" target="_blank">İzle</a>
-                </div>
-            </div>`;
-
-        playersGrid.appendChild(card);
-    });
-
-    document.getElementById("online").querySelector("b").textContent = filteredPlayers.length;
-
-    document.querySelectorAll('.star').forEach(star => {
-        star.addEventListener('click', (e) => {
-            const card = e.target.closest('.player-card');
-            const playerId = card.dataset.id;
-            
-            if (favorites.includes(playerId)) {
-                favorites = favorites.filter(id => id !== playerId);
-                card.classList.remove('favorite');
-                e.target.classList.remove('active');
-            } else {
-                favorites.push(playerId);
-                card.classList.add('favorite');
-                e.target.classList.add('active');
-            }
-            
-            localStorage.setItem('favorites', JSON.stringify(favorites));
-            updatePlayersList();
-        });
-    });
-}
-
-document.getElementById("searchInput").addEventListener("input", updatePlayersList);
-document.getElementById("refresh").addEventListener("click", getRooms);
-
-['withPhoto', 'withoutPhoto', 'favorites'].forEach(filter => {
+const filters = ['fotografli', 'fotografsiz', 'userlar', 'favoriler'];
+filters.forEach(filter => {
     document.getElementById(filter).addEventListener('change', (e) => {
-        filters[filter] = e.target.checked;
+        filtreler[filter] = e.target.checked;
         localStorage.setItem(filter, e.target.checked);
-        updatePlayersList();
+        setTimeout(kullanicilariGuncelle, 15);
     });
 });
 
-getRooms();
+odalariGetir();
+setInterval(odalariGetir, 30000);
 </script>
 
 <style>
-:root {
-    --primary: #2a2a2a;
-    --secondary: #404040;
-    --accent: #007bff;
-    --text: #ffffff;
-    --border: #333333;
-    --hover: #505050;
-}
-
-* {
+.fako-viewer {
+    background: #111620;
+    color: white;
+    font-family: Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: rgb(17, 22, 32);
+    background: linear-gradient(177deg, rgba(17, 22, 32, 1) 24%, rgba(38, 55, 89, 1) 82%);
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-body {
-    background: var(--primary);
-    color: var(--text);
-    line-height: 1.6;
     min-height: 100vh;
 }
 
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+.kullanicilar-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    overflow-y: auto;
+    padding: 15px;
+    box-sizing: border-box;
 }
 
-header {
-    margin-bottom: 30px;
+.search-input {
+    margin: 10px;
+    padding: 10px;
+    font-size: 18px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 100%;
+    max-width: 500px;
 }
 
-h1 {
-    text-align: center;
-    font-size: 2rem;
-    margin-bottom: 20px;
-    color: var(--accent);
+.kullanicilar {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
-.search-bar {
+.oyuncu {
+    border: 1px solid #555;
+    display: flex;
+    align-items: center;
+    background-color: #19233491;
+    color: white;
+    flex: 1 1 calc(25% - 20px);
+    box-sizing: border-box;
+    max-width: 200px;
+    transition: 300ms all;
+    position: relative;
+    border-radius: 5px 18px 5px 5px;
+    padding: 5px;
+}
+
+.oyuncu:hover {
+    background-color: #31528bcf;
+    border: 1px solid #c4c4c4;
+    transition: 300ms all;
+}
+
+.oyuncu img {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+    margin-right: 10px;
+    margin-left: 5px;
+    margin-top: 4px;
+    margin-bottom: 2px;
+    transition: 300ms all;
+}
+
+.arama-alani {
     display: flex;
     gap: 10px;
-    justify-content: center;
-    margin-bottom: 20px;
+    width: 100%;
+    max-width: 500px;
+    margin: 10px 0;
+}
+
+.oyuncu-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
+.oyuncu b,
+.oyuncu i,
+.oyuncu span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.oyuncu i {
+    font-size: 12px;
+}
+
+.linkler {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+.oyuncu-link {
+    color: #24ccff;
+    text-decoration: none;
+    font-weight: bold;
+    margin-top: 2px;
 }
 
 #searchInput {
-    width: 300px;
-    padding: 10px 15px;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    background: var(--secondary);
-    color: var(--text);
-    font-size: 16px;
+    background: #3d2aa3;
+    border: solid 1px #405d60;
+    color: #fff;
+    outline: none;
+    display: flex;
+    margin-top: 5px;
+    padding: 10px;
+    max-width: 280px;
+    flex: 1;
 }
 
-#refresh {
-    width: 42px;
-    height: 42px;
-    border: none;
-    border-radius: 5px;
-    background: var(--accent);
-    cursor: pointer;
+.fako_filter {
     display: flex;
-    align-items: center;
+    gap: 5px;
+    margin-bottom: 15px;
+    margin-top: 5px;
+    flex-wrap: wrap;
     justify-content: center;
-    transition: transform 0.2s;
 }
 
-#refresh svg {
-    width: 24px;
-    height: 24px;
-    fill: var(--text);
-}
-
-.filters {
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-    margin-bottom: 20px;
-}
-
-.filters label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.fako_filter label {
+    border: solid 1px #2c279a;
+    border-radius: 5px;
+    padding: 8px 8px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
     cursor: pointer;
-    padding: 8px 16px;
-    background: var(--secondary);
-    border-radius: 5px;
 }
 
-.players-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    padding: 20px 0;
+.fako_filter label:has(input[type="checkbox"]:checked) {
+    background-color: #2551a2;
 }
 
-.player-card {
-    background: var(--secondary);
-    border-radius: 10px;
-    padding: 15px;
-    position: relative;
-    display: flex;
-    gap: 15px;
-    transition: transform 0.2s;
-}
-
-.avatar {
-    width: 80px;
-    height: 80px;
-    flex-shrink: 0;
-}
-
-.avatar img {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid var(--border);
-}
-
-.info {
-    flex-grow: 1;
-}
-
-.name {
-    font-size: 1.2rem;
-    font-weight: 600;
+.fako_logo {
+    font-size: 18px;
+    background: linear-gradient(to right, hsl(320.6, 100%, 56.1%), hsl(204 100% 59%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-align: center;
     margin-bottom: 5px;
-}
-
-.details {
-    display: flex;
-    gap: 15px;
-    font-size: 0.9rem;
-    color: #aaa;
-    margin-bottom: 5px;
-}
-
-.room {
-    color: var(--accent);
-    margin-bottom: 10px;
-    font-size: 0.9rem;
-}
-
-.actions {
-    display: flex;
-    gap: 10px;
-}
-
-.actions a {
-    padding: 6px 12px;
-    border-radius: 5px;
-    text-decoration: none;
-    color: var(--text);
-    background: var(--hover);
-    font-size: 0.9rem;
-}
-
-.credit {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 8px 15px;
-    background: var(--secondary);
-    border-radius: 20px;
-    font-size: 0.8rem;
-    color: var(--accent);
 }
 
 @media (max-width: 768px) {
-    .container { padding: 10px; }
-    .players-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .player-card { padding: 10px; }
-    .avatar { width: 60px; height: 60px; }
-    .name { font-size: 1rem; }
-    .details, .room { font-size: 0.8rem; }
-    .actions a { padding: 4px 8px; font-size: 0.8rem; }
-    .filters { flex-wrap: wrap; gap: 10px; }
-    #searchInput { width: calc(100% - 52px); }
+    .oyuncu {
+        flex: 1 1 calc(50% - 20px);
+    }
+    .fako_filter {
+        padding: 0px 10px;
+        flex-wrap: wrap;
+        justify-content: space-around;
+        gap: 8px;
+    }
+    .fako_filter label {
+        flex: 1 1 38%;
+        text-align: center;
+    }
 }
 
 @media (max-width: 480px) {
-    .players-grid { grid-template-columns: repeat(1, 1fr); }
-    h1 { font-size: 1.5rem; }
-    .credit { bottom: 10px; right: 10px; font-size: 0.7rem; }
+    .oyuncu {
+        flex: 1 1 100%;
+        max-width: 46%;
+    }
+}
+
+#yenile {
+    background: #2551a2;
+    color: #fff;
+    margin-top: 5px;
+    padding: 10px 15px;
+    height: 46px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gg-redo {
+    box-sizing: border-box;
+    position: relative;
+    display: block;
+    transform: scale(var(--ggs, 1.3));
+    width: 14px;
+    height: 14px;
+    border: 2px solid;
+    border-right-color: transparent;
+    border-radius: 100px
+}
+
+.gg-redo::before {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-top: 2px solid;
+    border-right: 2px solid;
+    top: -3px;
+    right: -1px;
+    transform: rotate(68deg)
+}
+
+.gg-heart,
+.gg-heart::after {
+    cursor: pointer;
+    border: 2px solid;
+    border-top-left-radius: 100px;
+    border-top-right-radius: 100px;
+    width: 10px;
+    height: 8px;
+    border-bottom: 0
+}
+
+.gg-heart {
+    box-sizing: border-box;
+    transform: translate(calc(-10px / 2 * var(--ggs, 1)), calc(-6px / 2 * var(--ggs, 1))) rotate(-45deg) scale(var(--ggs, 1.3));
+    display: block;
+    top: -3px;
+    right: -3px;
+    position: absolute;
+    color: #e6e6e6;
+}
+
+.gg-heart::after,
+.gg-heart::before {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    position: absolute
+}
+
+.gg-heart::after {
+    right: -9px;
+    transform: rotate(90deg);
+    top: 5px
+}
+
+.gg-heart::before {
+    width: 11px;
+    height: 11px;
+    border-left: 2px solid;
+    border-bottom: 2px solid;
+    left: -2px;
+    top: 3px
+}
+
+.gg-heart.activex {
+    color: #FF3366;
+    border-color: #FF3366;
+    background: #FF9CB5;
+}
+
+.gg-heart.activex::after,
+.gg-heart.activex::before {
+    color: #FF3366;
+    background: #FF3366;
+    border-color: #FF3366;
+}
+
+.gg-heart:hover {
+    color: #FF3366;
+    background: #FF3366;
+    border-color: #FF3366;
+}
+
+.gg-heart:hover::after,
+.gg-heart:hover::before {
+    color: #FF3366;
+    background: #FF3366;
+    border-color: #FF3366;
 }
 </style>
 </body>
