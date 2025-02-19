@@ -8,7 +8,7 @@
 <body class="siber-tema">
     <div class="ana-konteyner">
         <div class="baslik">
-            <h1 class="siber-logo">WHOWHERE <span id="cevrimici">Çevrimiçi: <b>0</b></span></h1>
+            <h1 class="siber-logo">Whowhere <span id="cevrimici">Çevrimiçi: <b>0</b></span></h1>
             <div class="arama-alani">
                 <input type="text" id="aramaKutusu" placeholder="Oyuncu ara..." class="arama-input">
                 <button id="yenile" class="yenile-btn">
@@ -37,6 +37,7 @@
     </div>
 
 <script>
+const PROXY_URL = 'https://api.allorigins.win/raw?url=';
 let favoriler = JSON.parse(localStorage.getItem('favoriler')) || [];
 let oyuncular = new Map();
 let filtreler = {
@@ -51,28 +52,13 @@ Object.entries(filtreler).forEach(([key, value]) => {
 
 async function odalariGetir() {
     try {
-        const yanit = await fetch('https://gartic.io/req/list?search=&language[]=8', {
-            headers: {
-                'Accept': 'application/json',
-                'Origin': 'https://gartic.io'
-            },
-            credentials: 'include'
-        });
+        const yanit = await fetch(PROXY_URL + encodeURIComponent('https://gartic.io/req/list?search=&language[]=8'));
         const veri = await yanit.json();
         oyuncular.clear();
         const odalar = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
         await odalariKontrolEt(odalar);
     } catch (hata) {
-        const yedekUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://gartic.io/req/list?search=&language[]=8');
-        try {
-            const yanit = await fetch(yedekUrl);
-            const veri = await yanit.json();
-            oyuncular.clear();
-            const odalar = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
-            await odalariKontrolEt(odalar);
-        } catch (yedekHata) {
-            console.error('Veri çekme hatası:', yedekHata);
-        }
+        console.error('Veri çekme hatası:', hata);
     }
 }
 
@@ -85,24 +71,21 @@ function sunucuyuKontrolEt(sunucu, odaKodu) {
         }, 3000);
 
         ws.onopen = () => {
-            ws.send('40');
-            setTimeout(() => {
-                ws.send(`42["12",{"room":"${odaKodu}","v":20000}]`);
-            }, 100);
+            ws.send(`42[12,{"v":20000,"platform":0,"sala":"${odaKodu.slice(-4)}"}]`);
         };
 
         ws.onmessage = (olay) => {
-            if (olay.data.startsWith('42["3"')) {
+            if (olay.data[4] == "5") {
                 try {
-                    const veri = JSON.parse(olay.data.slice(2))[1];
-                    if (veri.users) {
-                        veri.users.forEach(oyuncu => {
+                    const veri = JSON.parse(olay.data.slice(2));
+                    if (veri[0] == 5 && Array.isArray(veri[5])) {
+                        veri[5].forEach(oyuncu => {
                             oyuncular.set(oyuncu.id.toString(), {
                                 id: oyuncu.id.toString(),
                                 nick: oyuncu.nick,
                                 avatar: oyuncu.avatar,
-                                foto: oyuncu.photo,
-                                puan: oyuncu.points || 0,
+                                foto: oyuncu.foto,
+                                puan: oyuncu.pontos || 0,
                                 odasi: `https://gartic.io/${odaKodu}`
                             });
                         });
@@ -219,8 +202,6 @@ document.getElementById("yenile").addEventListener("click", odalariGetir);
 odalariGetir();
 setInterval(odalariGetir, 60000);
 </script>
-
-
 
 
 <style>
@@ -508,60 +489,20 @@ body {
 }
 
 @media (max-width: 768px) {
-    .siber-logo {
-        font-size: 2rem;
-    }
-
-    .arama-alani {
-        flex-direction: row;
-        align-items: center;
-    }
-
-    .arama-input {
-        width: calc(100% - 60px);
-        max-width: 300px;
-    }
-
-    .filtre-bolumu {
-        gap: 10px;
-    }
-
-    .siber-checkbox {
-        padding: 6px 12px;
-    }
-
-    .oyuncular-grid {
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 15px;
-    }
-
-    .yapimci {
-        bottom: 10px;
-        right: 10px;
-        font-size: 0.7rem;
-    }
+    .siber-logo { font-size: 2rem; }
+    .arama-alani { flex-direction: row; }
+    .arama-input { width: calc(100% - 60px); }
+    .filtre-bolumu { gap: 10px; }
+    .siber-checkbox { padding: 6px 12px; }
+    .oyuncular-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+    .yapimci { bottom: 10px; right: 10px; font-size: 0.7rem; }
 }
 
 @media (max-width: 480px) {
-    .ana-konteyner {
-        padding: 10px;
-    }
-
-    .siber-logo {
-        font-size: 1.5rem;
-    }
-
-    .arama-alani {
-        flex-direction: row;
-    }
-
-    .oyuncular-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .oyuncu-kart {
-        padding: 10px;
-    }
+    .ana-konteyner { padding: 10px; }
+    .siber-logo { font-size: 1.5rem; }
+    .oyuncular-grid { grid-template-columns: 1fr; }
+    .oyuncu-kart { padding: 10px; }
 }
 </style>
 </body>
