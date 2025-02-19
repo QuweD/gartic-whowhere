@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhoWhere gartic.io</title>
+    <title>Whowhere V3</title>
 </head>
 <body class="siber-tema">
     <div class="ana-konteyner">
@@ -87,7 +87,7 @@ function sunucuyuKontrolEt(sunucu, odaKodu) {
         ws.onopen = () => {
             ws.send('40');
             setTimeout(() => {
-                ws.send(`42["1",{"room":"${odaKodu}","v":20000}]`);
+                ws.send(`42["12",{"room":"${odaKodu}","v":20000}]`);
             }, 100);
         };
 
