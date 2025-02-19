@@ -5,504 +5,491 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Whowhere V3</title>
 </head>
-<body class="siber-tema">
-    <div class="ana-konteyner">
-        <div class="baslik">
-            <h1 class="siber-logo">Whowhere <span id="cevrimici">Çevrimiçi: <b>0</b></span></h1>
-            <div class="arama-alani">
-                <input type="text" id="aramaKutusu" placeholder="Oyuncu ara..." class="arama-input">
-                <button id="yenile" class="yenile-btn">
-                    <svg viewBox="0 0 24 24" class="yenile-ikon">
+<body>
+    <div class="container">
+        <header>
+            <h1>WHOWHERE <span id="online">Çevrimiçi: <b>0</b></span></h1>
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Oyuncu ara...">
+                <button id="refresh">
+                    <svg viewBox="0 0 24 24">
                         <path d="M12 20c4.4 0 8-3.6 8-8s-3.6-8-8-8s-8 3.6-8 8h3l-4 4l-4-4h3c0-5.5 4.5-10 10-10s10 4.5 10 10s-4.5 10-10 10v-2z"/>
                     </svg>
                 </button>
             </div>
-            <div class="filtre-bolumu">
-                <label class="siber-checkbox">
-                    <input type="checkbox" id="fotografli">
+            <div class="filters">
+                <label>
+                    <input type="checkbox" id="withPhoto">
                     <span>Fotoğraflı</span>
                 </label>
-                <label class="siber-checkbox">
-                    <input type="checkbox" id="fotografsiz">
+                <label>
+                    <input type="checkbox" id="withoutPhoto">
                     <span>Fotoğrafsız</span>
                 </label>
-                <label class="siber-checkbox">
-                    <input type="checkbox" id="favoriler">
+                <label>
+                    <input type="checkbox" id="favorites">
                     <span>Favoriler</span>
                 </label>
             </div>
-        </div>
-        <div class="oyuncular-grid"></div>
-        <div class="yapimci">Made by Akira</div>
+        </header>
+        <main class="players-grid"></main>
+        <div class="credit">Made by Akira</div>
     </div>
 
 <script>
 const PROXY_URL = 'https://api.allorigins.win/raw?url=';
-let favoriler = JSON.parse(localStorage.getItem('favoriler')) || [];
-let oyuncular = new Map();
-let filtreler = {
-    fotografli: localStorage.getItem('fotografli') === 'true',
-    fotografsiz: localStorage.getItem('fotografsiz') === 'true',
-    favoriler: localStorage.getItem('favorilerGoster') === 'true'
+let players = new Map();
+let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
+let filters = {
+    withPhoto: localStorage.getItem('withPhoto') === 'true',
+    withoutPhoto: localStorage.getItem('withoutPhoto') === 'true',
+    favorites: localStorage.getItem('showFavorites') === 'true'
 };
 
-Object.entries(filtreler).forEach(([key, value]) => {
+Object.entries(filters).forEach(([key, value]) => {
     document.getElementById(key).checked = value;
 });
 
-async function odalariGetir() {
+async function getRooms() {
     try {
-        const yanit = await fetch(PROXY_URL + encodeURIComponent('https://gartic.io/req/list?search=&language[]=8'));
-        const veri = await yanit.json();
-        oyuncular.clear();
-        const odalar = veri.filter(oda => oda.quant > 0).map(oda => oda.code);
-        await odalariKontrolEt(odalar);
-    } catch (hata) {
-        console.error('Veri çekme hatası:', hata);
+        const response = await fetch(PROXY_URL + encodeURIComponent('https://gartic.io/req/list?search=&language[]=8'));
+        const data = await response.json();
+        const rooms = data.filter(room => room.quant > 0).map(room => room.code);
+        players.clear();
+        
+        for(let i = 0; i < 3; i++) {
+            await checkAllRooms(rooms);
+        }
+        
+        updatePlayersList();
+    } catch (error) {
+        console.error('Veri çekme hatası:', error);
     }
 }
 
-function sunucuyuKontrolEt(sunucu, odaKodu) {
+function checkServer(server, code) {
     return new Promise((resolve) => {
-        const ws = new WebSocket(`wss://server${sunucu}.gartic.io/socket.io/?EIO=3&transport=websocket`);
-        let zaman = setTimeout(() => {
+        const ws = new WebSocket(`wss://server${server}.gartic.io/socket.io/?EIO=3&transport=websocket`);
+        let timeout = setTimeout(() => {
             ws.close();
             resolve();
         }, 3000);
 
         ws.onopen = () => {
-            ws.send(`42[12,{"v":20000,"platform":0,"sala":"${odaKodu.slice(-4)}"}]`);
+            ws.send(`42["join",{"room":"${code}","v":20000}]`);
         };
 
-        ws.onmessage = (olay) => {
-            if (olay.data[4] == "5") {
+        ws.onmessage = (event) => {
+            if (event.data.startsWith('42["updateRoom"')) {
                 try {
-                    const veri = JSON.parse(olay.data.slice(2));
-                    if (veri[0] == 5 && Array.isArray(veri[5])) {
-                        veri[5].forEach(oyuncu => {
-                            oyuncular.set(oyuncu.id.toString(), {
-                                id: oyuncu.id.toString(),
-                                nick: oyuncu.nick,
-                                avatar: oyuncu.avatar,
-                                foto: oyuncu.foto,
-                                puan: oyuncu.pontos || 0,
-                                odasi: `https://gartic.io/${odaKodu}`
+                    const data = JSON.parse(event.data.slice(2))[1];
+                    if (data.players) {
+                        data.players.forEach(player => {
+                            players.set(player.id.toString(), {
+                                id: player.id.toString(),
+                                nick: player.nick,
+                                avatar: player.avatar,
+                                photo: player.foto,
+                                points: player.points || 0,
+                                room: `https://gartic.io/${code}`
                             });
                         });
                     }
                 } catch (e) {}
-                clearTimeout(zaman);
+                clearTimeout(timeout);
                 ws.close();
                 resolve();
             }
         };
 
         ws.onerror = () => {
-            clearTimeout(zaman);
+            clearTimeout(timeout);
             resolve();
         };
     });
 }
 
-async function odalariKontrolEt(odalar) {
-    const sunucular = ['01', '02', '03', '04', '05', '06'];
-    const islemler = [];
+async function checkAllRooms(rooms) {
+    const servers = ['01', '02', '03', '04', '05', '06'];
+    const promises = [];
 
-    for (const oda of odalar) {
-        for (const sunucu of sunucular) {
-            islemler.push(sunucuyuKontrolEt(sunucu, oda));
+    for (const room of rooms) {
+        for (const server of servers) {
+            promises.push(checkServer(server, room));
         }
     }
 
-    await Promise.allSettled(islemler);
-    oyunculariGuncelle();
+    await Promise.allSettled(promises);
 }
 
-function oyunculariGuncelle() {
-    const aramaMetni = document.getElementById("aramaKutusu").value.toLowerCase();
-    const oyuncularGrid = document.querySelector(".oyuncular-grid");
-    oyuncularGrid.innerHTML = "";
+function updatePlayersList() {
+    const searchText = document.getElementById("searchInput").value.toLowerCase();
+    const playersGrid = document.querySelector(".players-grid");
+    playersGrid.innerHTML = "";
 
-    let filtrelenmisOyuncular = Array.from(oyuncular.values()).filter(oyuncu => {
-        if (filtreler.fotografli && !oyuncu.foto) return false;
-        if (filtreler.fotografsiz && oyuncu.foto) return false;
-        if (filtreler.favoriler && !favoriler.includes(oyuncu.id)) return false;
-        return oyuncu.nick.toLowerCase().includes(aramaMetni);
+    let filteredPlayers = Array.from(players.values()).filter(player => {
+        if (filters.withPhoto && !player.photo) return false;
+        if (filters.withoutPhoto && player.photo) return false;
+        if (filters.favorites && !favorites.includes(player.id)) return false;
+        return player.nick.toLowerCase().includes(searchText);
     });
 
-    filtrelenmisOyuncular.sort((a, b) => {
-        const aFavori = favoriler.includes(a.id);
-        const bFavori = favoriler.includes(b.id);
-        if (aFavori !== bFavori) return bFavori - aFavori;
-        return b.puan - a.puan;
+    filteredPlayers.sort((a, b) => {
+        const aFav = favorites.includes(a.id);
+        const bFav = favorites.includes(b.id);
+        if (aFav !== bFav) return bFav - aFav;
+        return b.points - a.points;
     });
 
-    filtrelenmisOyuncular.forEach(oyuncu => {
-        const favori = favoriler.includes(oyuncu.id);
-        const oyuncuKarti = document.createElement('div');
-        oyuncuKarti.className = `oyuncu-kart ${favori ? 'favori' : ''}`;
-        oyuncuKarti.dataset.id = oyuncu.id;
+    filteredPlayers.forEach(player => {
+        const isFavorite = favorites.includes(player.id);
+        const card = document.createElement('div');
+        card.className = `player-card ${isFavorite ? 'favorite' : ''}`;
+        card.dataset.id = player.id;
         
-        oyuncuKarti.innerHTML = `
-            <div class="yildiz-ikon ${favori ? 'aktif' : ''}">★</div>
-            <div class="oyuncu-avatar">
-                <img src="${oyuncu.foto || 'https://gartic.io/static/images/avatar/svg/' + oyuncu.avatar + '.svg'}" 
-                     alt="${oyuncu.nick}">
+        card.innerHTML = `
+            <div class="star ${isFavorite ? 'active' : ''}">★</div>
+            <div class="avatar">
+                <img src="${player.photo || 'https://gartic.io/static/images/avatar/svg/' + player.avatar + '.svg'}" 
+                     alt="${player.nick}">
             </div>
-            <div class="oyuncu-bilgi">
-                <div class="oyuncu-isim">${oyuncu.nick}</div>
-                <div class="oyuncu-detay">
-                    <span>ID: ${oyuncu.id}</span>
-                    <span>Puan: ${oyuncu.puan}</span>
+            <div class="info">
+                <div class="name">${player.nick}</div>
+                <div class="details">
+                    <span>ID: ${player.id}</span>
+                    <span>Puan: ${player.points}</span>
                 </div>
-                <div class="oda-bilgi">Oda: ${oyuncu.odasi.slice(18)}</div>
-                <div class="buton-grubu">
-                    <a href="${oyuncu.odasi}" target="_blank" class="siber-buton">Katıl</a>
-                    <a href="${oyuncu.odasi}/viewer" target="_blank" class="siber-buton">İzle</a>
+                <div class="room">Oda: ${player.room.slice(18)}</div>
+                <div class="actions">
+                    <a href="${player.room}" target="_blank">Katıl</a>
+                    <a href="${player.room}/viewer" target="_blank">İzle</a>
                 </div>
             </div>`;
 
-        oyuncularGrid.appendChild(oyuncuKarti);
+        playersGrid.appendChild(card);
     });
 
-    document.getElementById("cevrimici").querySelector("b").textContent = filtrelenmisOyuncular.length;
+    document.getElementById("online").querySelector("b").textContent = filteredPlayers.length;
 
-    document.querySelectorAll('.yildiz-ikon').forEach(yildiz => {
-        yildiz.addEventListener('click', (e) => {
-            const oyuncuKarti = e.target.closest('.oyuncu-kart');
-            const oyuncuId = oyuncuKarti.dataset.id;
+    document.querySelectorAll('.star').forEach(star => {
+        star.addEventListener('click', (e) => {
+            const card = e.target.closest('.player-card');
+            const playerId = card.dataset.id;
             
-            if (favoriler.includes(oyuncuId)) {
-                favoriler = favoriler.filter(id => id !== oyuncuId);
-                oyuncuKarti.classList.remove('favori');
-                e.target.classList.remove('aktif');
+            if (favorites.includes(playerId)) {
+                favorites = favorites.filter(id => id !== playerId);
+                card.classList.remove('favorite');
+                e.target.classList.remove('active');
             } else {
-                favoriler.push(oyuncuId);
-                oyuncuKarti.classList.add('favori');
-                e.target.classList.add('aktif');
+                favorites.push(playerId);
+                card.classList.add('favorite');
+                e.target.classList.add('active');
             }
             
-            localStorage.setItem('favoriler', JSON.stringify(favoriler));
-            oyunculariGuncelle();
+            localStorage.setItem('favorites', JSON.stringify(favorites));
+            updatePlayersList();
         });
     });
 }
 
-document.getElementById("aramaKutusu").addEventListener("input", oyunculariGuncelle);
-document.getElementById("yenile").addEventListener("click", odalariGetir);
+document.getElementById("searchInput").addEventListener("input", updatePlayersList);
+document.getElementById("refresh").addEventListener("click", getRooms);
 
-['fotografli', 'fotografsiz', 'favoriler'].forEach(filtre => {
-    document.getElementById(filtre).addEventListener('change', (e) => {
-        filtreler[filtre] = e.target.checked;
-        localStorage.setItem(filtre, e.target.checked);
-        oyunculariGuncelle();
+['withPhoto', 'withoutPhoto', 'favorites'].forEach(filter => {
+    document.getElementById(filter).addEventListener('change', (e) => {
+        filters[filter] = e.target.checked;
+        localStorage.setItem(filter, e.target.checked);
+        updatePlayersList();
     });
 });
 
-odalariGetir();
-setInterval(odalariGetir, 60000);
+getRooms();
 </script>
+
 
 
 <style>
 :root {
-    --birincil: #ff0055;
-    --ikincil: #00ffaa;
-    --arkaplan: #0f0f13;
-    --yuzey: #1a1a1f;
-    --yazi: #ffffff;
-    --vurgu: #ff00ff;
+    --primary: #2a2a2a;
+    --secondary: #404040;
+    --accent: #007bff;
+    --text: #ffffff;
+    --border: #333333;
+    --hover: #505050;
 }
 
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
-    background: var(--arkaplan);
-    color: var(--yazi);
+    background: var(--primary);
+    color: var(--text);
+    line-height: 1.6;
     min-height: 100vh;
-    line-height: 1.5;
 }
 
-.ana-konteyner {
-    max-width: 1400px;
+.container {
+    max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
-    position: relative;
 }
 
-.baslik {
-    text-align: center;
+header {
     margin-bottom: 30px;
 }
 
-.siber-logo {
-    font-size: 2.5rem;
-    font-weight: 800;
-    background: linear-gradient(45deg, var(--birincil), var(--ikincil));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+h1 {
+    text-align: center;
+    font-size: 2rem;
     margin-bottom: 20px;
-    text-shadow: 0 0 10px rgba(255, 0, 85, 0.5);
+    color: var(--accent);
 }
 
-.arama-alani {
+.search-bar {
     display: flex;
     gap: 10px;
     justify-content: center;
     margin-bottom: 20px;
-    align-items: center;
 }
 
-.arama-input {
-    background: var(--yuzey);
-    border: 2px solid var(--birincil);
-    color: var(--yazi);
-    padding: 12px 20px;
-    border-radius: 8px;
+#searchInput {
     width: 300px;
-    font-size: 1rem;
+    padding: 10px 15px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--secondary);
+    color: var(--text);
+    font-size: 16px;
+}
+
+#searchInput:focus {
     outline: none;
-    transition: all 0.3s ease;
+    border-color: var(--accent);
 }
 
-.arama-input:focus {
-    box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);
-}
-
-.yenile-btn {
-    background: var(--birincil);
+#refresh {
+    width: 42px;
+    height: 42px;
     border: none;
-    border-radius: 8px;
-    width: 48px;
-    height: 48px;
+    border-radius: 5px;
+    background: var(--accent);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s ease;
+    transition: transform 0.2s;
 }
 
-.yenile-btn:hover {
-    background: var(--ikincil);
+#refresh:hover {
     transform: scale(1.1);
 }
 
-.yenile-ikon {
+#refresh svg {
     width: 24px;
     height: 24px;
-    fill: var(--arkaplan);
+    fill: var(--text);
 }
 
-.filtre-bolumu {
+.filters {
     display: flex;
-    gap: 15px;
+    gap: 20px;
     justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
 }
 
-.siber-checkbox {
+.filters label {
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
     padding: 8px 16px;
-    background: var(--yuzey);
-    border-radius: 6px;
-    border: 1px solid var(--birincil);
-    transition: all 0.3s ease;
+    background: var(--secondary);
+    border-radius: 5px;
+    transition: background 0.2s;
 }
 
-.siber-checkbox:hover {
-    background: rgba(255, 0, 85, 0.1);
-    transform: translateY(-2px);
+.filters label:hover {
+    background: var(--hover);
 }
 
-.siber-checkbox input {
-    display: none;
+.filters input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
 }
 
-.siber-checkbox span {
-    font-size: 0.9rem;
-    color: var(--yazi);
-}
-
-.siber-checkbox input:checked + span {
-    color: var(--birincil);
-}
-
-.oyuncular-grid {
+.players-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 20px;
     padding: 20px 0;
 }
 
-.oyuncu-kart {
-    background: var(--yuzey);
-    border-radius: 12px;
+.player-card {
+    background: var(--secondary);
+    border-radius: 10px;
     padding: 15px;
     position: relative;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
-    backdrop-filter: blur(5px);
+    display: flex;
+    gap: 15px;
+    transition: transform 0.2s;
 }
 
-.oyuncu-kart:hover {
+.player-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 5px 15px rgba(255, 0, 85, 0.2);
 }
 
-.oyuncu-kart.favori {
-    border: 1px solid var(--birincil);
+.player-card.favorite {
+    border: 2px solid var(--accent);
 }
 
-.yildiz-ikon {
+.star {
     position: absolute;
     top: 10px;
     right: 10px;
     font-size: 24px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.3);
-    transition: all 0.3s ease;
-    z-index: 2;
+    color: #666;
+    transition: color 0.2s;
 }
 
-.yildiz-ikon:hover,
-.yildiz-ikon.aktif {
-    color: var(--birincil);
-    text-shadow: 0 0 10px var(--birincil);
-    transform: scale(1.2);
+.star:hover, .star.active {
+    color: var(--accent);
 }
 
-.oyuncu-avatar {
+.avatar {
     width: 80px;
     height: 80px;
-    margin: 0 auto 15px;
-    position: relative;
+    flex-shrink: 0;
 }
 
-.oyuncu-avatar img {
+.avatar img {
     width: 100%;
     height: 100%;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid var(--birincil);
-    transition: all 0.3s ease;
+    border: 2px solid var(--border);
 }
 
-.oyuncu-avatar img:hover {
-    transform: scale(1.1);
-    border-color: var(--ikincil);
+.info {
+    flex-grow: 1;
 }
 
-.oyuncu-bilgi {
-    text-align: center;
-}
-
-.oyuncu-isim {
+.name {
     font-size: 1.2rem;
     font-weight: 600;
-    margin-bottom: 8px;
-    color: var(--yazi);
-    text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    margin-bottom: 5px;
 }
 
-.oyuncu-detay {
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 8px;
+.details {
     display: flex;
-    justify-content: center;
     gap: 15px;
-}
-
-.oda-bilgi {
     font-size: 0.9rem;
-    color: var(--birincil);
-    margin-bottom: 15px;
-    text-shadow: 0 0 5px var(--birincil);
+    color: #aaa;
+    margin-bottom: 5px;
 }
 
-.buton-grubu {
+.room {
+    color: var(--accent);
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+}
+
+.actions {
     display: flex;
     gap: 10px;
-    justify-content: center;
 }
 
-.siber-buton {
-    padding: 8px 16px;
-    background: transparent;
-    border: 1px solid var(--birincil);
-    color: var(--birincil);
-    border-radius: 6px;
+.actions a {
+    padding: 6px 12px;
+    border-radius: 5px;
     text-decoration: none;
+    color: var(--text);
+    background: var(--hover);
     font-size: 0.9rem;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
+    transition: background 0.2s;
 }
 
-.siber-buton:hover {
-    background: var(--birincil);
-    color: var(--arkaplan);
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(255, 0, 85, 0.3);
+.actions a:hover {
+    background: var(--accent);
 }
 
-.yapimci {
+.credit {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    font-size: 0.8rem;
-    color: var(--birincil);
     padding: 8px 15px;
-    background: var(--yuzey);
+    background: var(--secondary);
     border-radius: 20px;
-    border: 1px solid var(--birincil);
-    box-shadow: 0 0 10px rgba(255, 0, 85, 0.2);
-    z-index: 1000;
-    transition: all 0.3s ease;
-}
-
-.yapimci:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 0 20px rgba(255, 0, 85, 0.4);
-}
-
-@keyframes parlama {
-    0% { box-shadow: 0 0 5px var(--birincil); }
-    50% { box-shadow: 0 0 20px var(--birincil); }
-    100% { box-shadow: 0 0 5px var(--birincil); }
-}
-
-.favori {
-    animation: parlama 2s infinite;
+    font-size: 0.8rem;
+    color: var(--accent);
 }
 
 @media (max-width: 768px) {
-    .siber-logo { font-size: 2rem; }
-    .arama-alani { flex-direction: row; }
-    .arama-input { width: calc(100% - 60px); }
-    .filtre-bolumu { gap: 10px; }
-    .siber-checkbox { padding: 6px 12px; }
-    .oyuncular-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
-    .yapimci { bottom: 10px; right: 10px; font-size: 0.7rem; }
+    .container {
+        padding: 10px;
+    }
+
+    .players-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .player-card {
+        padding: 10px;
+    }
+
+    .avatar {
+        width: 60px;
+        height: 60px;
+    }
+
+    .name {
+        font-size: 1rem;
+    }
+
+    .details, .room {
+        font-size: 0.8rem;
+    }
+
+    .actions a {
+        padding: 4px 8px;
+        font-size: 0.8rem;
+    }
+
+    .filters {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .filters label {
+        padding: 6px 12px;
+        font-size: 0.9rem;
+    }
+
+    #searchInput {
+        width: calc(100% - 52px);
+    }
 }
 
 @media (max-width: 480px) {
-    .ana-konteyner { padding: 10px; }
-    .siber-logo { font-size: 1.5rem; }
-    .oyuncular-grid { grid-template-columns: 1fr; }
-    .oyuncu-kart { padding: 10px; }
+    .players-grid {
+        grid-template-columns: repeat(1, 1fr);
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    .credit {
+        bottom: 10px;
+        right: 10px;
+        font-size: 0.7rem;
+    }
 }
 </style>
 </body>
