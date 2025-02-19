@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whowhere V3</title>
+    <title>WHOWHERE gartic.io</title>
 </head>
 <body>
     <div class="container">
@@ -76,21 +76,21 @@ function checkServer(server, code) {
         }, 3000);
 
         ws.onopen = () => {
-            ws.send(`42["12",{"room":"${code}","v":20000}]`);
+            ws.send(`42[12,{"v":20000,"platform":0,"sala":"${code.slice(-4)}"}]`);
         };
 
         ws.onmessage = (event) => {
-            if (event.data.startsWith('42["updateRoom"')) {
+            if (event.data[4] == "5") {
                 try {
-                    const data = JSON.parse(event.data.slice(2))[1];
-                    if (data.players) {
-                        data.players.forEach(player => {
+                    const data = JSON.parse(event.data.slice(2));
+                    if (data[0] == 5) {
+                        data[5].forEach(player => {
                             players.set(player.id.toString(), {
                                 id: player.id.toString(),
                                 nick: player.nick,
                                 avatar: player.avatar,
                                 photo: player.foto,
-                                points: player.points || 0,
+                                points: player.pontos || 0,
                                 room: `https://gartic.io/${code}`
                             });
                         });
@@ -121,6 +121,11 @@ async function checkAllRooms(rooms) {
 
     await Promise.allSettled(promises);
 }
+
+
+
+
+
 
 function updatePlayersList() {
     const searchText = document.getElementById("searchInput").value.toLowerCase();
@@ -206,8 +211,6 @@ document.getElementById("refresh").addEventListener("click", getRooms);
 getRooms();
 </script>
 
-
-
 <style>
 :root {
     --primary: #2a2a2a;
@@ -266,11 +269,6 @@ h1 {
     font-size: 16px;
 }
 
-#searchInput:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-
 #refresh {
     width: 42px;
     height: 42px;
@@ -282,10 +280,6 @@ h1 {
     align-items: center;
     justify-content: center;
     transition: transform 0.2s;
-}
-
-#refresh:hover {
-    transform: scale(1.1);
 }
 
 #refresh svg {
@@ -309,17 +303,6 @@ h1 {
     padding: 8px 16px;
     background: var(--secondary);
     border-radius: 5px;
-    transition: background 0.2s;
-}
-
-.filters label:hover {
-    background: var(--hover);
-}
-
-.filters input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--accent);
 }
 
 .players-grid {
@@ -337,28 +320,6 @@ h1 {
     display: flex;
     gap: 15px;
     transition: transform 0.2s;
-}
-
-.player-card:hover {
-    transform: translateY(-5px);
-}
-
-.player-card.favorite {
-    border: 2px solid var(--accent);
-}
-
-.star {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 24px;
-    cursor: pointer;
-    color: #666;
-    transition: color 0.2s;
-}
-
-.star:hover, .star.active {
-    color: var(--accent);
 }
 
 .avatar {
@@ -411,11 +372,6 @@ h1 {
     color: var(--text);
     background: var(--hover);
     font-size: 0.9rem;
-    transition: background 0.2s;
-}
-
-.actions a:hover {
-    background: var(--accent);
 }
 
 .credit {
@@ -430,66 +386,21 @@ h1 {
 }
 
 @media (max-width: 768px) {
-    .container {
-        padding: 10px;
-    }
-
-    .players-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-    }
-
-    .player-card {
-        padding: 10px;
-    }
-
-    .avatar {
-        width: 60px;
-        height: 60px;
-    }
-
-    .name {
-        font-size: 1rem;
-    }
-
-    .details, .room {
-        font-size: 0.8rem;
-    }
-
-    .actions a {
-        padding: 4px 8px;
-        font-size: 0.8rem;
-    }
-
-    .filters {
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-
-    .filters label {
-        padding: 6px 12px;
-        font-size: 0.9rem;
-    }
-
-    #searchInput {
-        width: calc(100% - 52px);
-    }
+    .container { padding: 10px; }
+    .players-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .player-card { padding: 10px; }
+    .avatar { width: 60px; height: 60px; }
+    .name { font-size: 1rem; }
+    .details, .room { font-size: 0.8rem; }
+    .actions a { padding: 4px 8px; font-size: 0.8rem; }
+    .filters { flex-wrap: wrap; gap: 10px; }
+    #searchInput { width: calc(100% - 52px); }
 }
 
 @media (max-width: 480px) {
-    .players-grid {
-        grid-template-columns: repeat(1, 1fr);
-    }
-
-    h1 {
-        font-size: 1.5rem;
-    }
-
-    .credit {
-        bottom: 10px;
-        right: 10px;
-        font-size: 0.7rem;
-    }
+    .players-grid { grid-template-columns: repeat(1, 1fr); }
+    h1 { font-size: 1.5rem; }
+    .credit { bottom: 10px; right: 10px; font-size: 0.7rem; }
 }
 </style>
 </body>
